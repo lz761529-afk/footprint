@@ -1013,6 +1013,7 @@
       <span>Time by Category</span>
       <div style="display:flex;gap:6px">
         <button class="filter-btn active" id="pie-btn-day" style="padding:5px 12px;font-size:12px" onclick="setPieFilter('day',this)">Today</button>
+        <button class="filter-btn" id="pie-btn-yesterday" style="padding:5px 12px;font-size:12px" onclick="setPieFilter('yesterday',this)">Yesterday</button>
         <button class="filter-btn" id="pie-btn-week" style="padding:5px 12px;font-size:12px" onclick="setPieFilter('week',this)">Past Week</button>
         <button class="filter-btn" id="pie-btn-month" style="padding:5px 12px;font-size:12px" onclick="setPieFilter('month',this)">Past Month</button>
       </div>
@@ -2210,6 +2211,10 @@ function setPieFilter(f, btn) {
 function getPieEntries() {
   const today = toDateStr(new Date());
   if (pieFilter === 'day') return entries.filter(e => e.date === today);
+  if (pieFilter === 'yesterday') {
+    const yest = new Date(); yest.setDate(yest.getDate() - 1);
+    return entries.filter(e => e.date === toDateStr(yest));
+  }
   const cutoff = new Date();
   if (pieFilter === 'week') cutoff.setDate(cutoff.getDate() - 7);
   else cutoff.setMonth(cutoff.getMonth() - 1);
@@ -2219,6 +2224,7 @@ function getPieEntries() {
 
 function getPieTotalMins() {
   if (pieFilter === 'day') return 24 * 60;
+  if (pieFilter === 'yesterday') return 24 * 60;
   if (pieFilter === 'week') return 7 * 24 * 60;
   return 30 * 24 * 60;
 }
