@@ -855,15 +855,24 @@
       <div class="form-row">
         <div class="form-group">
           <label>Start Time</label>
-          <select id="edit-time-start" onchange="onEditStartChange()"></select>
+          <div style="display:flex;gap:4px">
+            <select id="edit-time-start-h" onchange="onEditStartChange()" style="flex:1"></select>
+            <select id="edit-time-start-m" onchange="onEditStartChange()" style="flex:1"></select>
+          </div>
         </div>
         <div class="form-group">
           <label>Duration</label>
-          <select id="edit-duration" onchange="onEditDurationChange()"></select>
+          <div style="display:flex;gap:4px">
+            <select id="edit-duration-h" onchange="onEditDurationChange()" style="flex:1"></select>
+            <select id="edit-duration-m" onchange="onEditDurationChange()" style="flex:1"></select>
+          </div>
         </div>
         <div class="form-group">
           <label>End Time</label>
-          <select id="edit-time-end" onchange="onEditEndChange()"></select>
+          <div style="display:flex;gap:4px">
+            <select id="edit-time-end-h" onchange="onEditEndChange()" style="flex:1"></select>
+            <select id="edit-time-end-m" onchange="onEditEndChange()" style="flex:1"></select>
+          </div>
         </div>
       </div>
       <div class="form-group">
@@ -907,16 +916,25 @@
     </div>
     <div class="form-row" style="margin-top: 12px">
       <div class="form-group">
-        <label for="inp-time-start">Start Time</label>
-        <select id="inp-time-start" onchange="onStartChange()"></select>
+        <label for="inp-time-start-h">Start Time</label>
+        <div style="display:flex;gap:4px">
+          <select id="inp-time-start-h" onchange="onStartChange()" style="flex:1"></select>
+          <select id="inp-time-start-m" onchange="onStartChange()" style="flex:1"></select>
+        </div>
       </div>
       <div class="form-group">
-        <label for="inp-duration">Duration</label>
-        <select id="inp-duration" onchange="onDurationChange()"></select>
+        <label for="inp-duration-h">Duration</label>
+        <div style="display:flex;gap:4px">
+          <select id="inp-duration-h" onchange="onDurationChange()" style="flex:1"></select>
+          <select id="inp-duration-m" onchange="onDurationChange()" style="flex:1"></select>
+        </div>
       </div>
       <div class="form-group">
-        <label for="inp-time-end">End Time</label>
-        <select id="inp-time-end" onchange="onEndChange()"></select>
+        <label for="inp-time-end-h">End Time</label>
+        <div style="display:flex;gap:4px">
+          <select id="inp-time-end-h" onchange="onEndChange()" style="flex:1"></select>
+          <select id="inp-time-end-m" onchange="onEndChange()" style="flex:1"></select>
+        </div>
       </div>
     </div>
     <div style="margin-top: 12px">
@@ -1370,7 +1388,7 @@ function deletePlaceCard(name) {
 function initDefaults() {
   const now = new Date();
   document.getElementById('inp-date').value = toDateStr(now);
-  document.getElementById('inp-time-start').value = nearestQuarter(now);
+  setTimeSplit('inp', 'start', nearestQuarter(now));
   document.getElementById('header-date').textContent = now.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
 }
 
@@ -1450,12 +1468,12 @@ function openEditModal(id) {
   document.getElementById('edit-date').value = e.date || '';
   document.getElementById('edit-note').value = e.note || '';
 
-  buildTimeOptions(document.getElementById('edit-time-start'));
-  buildTimeOptions(document.getElementById('edit-time-end'), true);
-  buildDurationOptions(document.getElementById('edit-duration'));
-  document.getElementById('edit-time-start').value = e.timeStart || '';
-  document.getElementById('edit-time-end').value = e.timeEnd || '';
-  document.getElementById('edit-duration').value = e.duration || '';
+  buildTimeOptions(document.getElementById('edit-time-start-h'), document.getElementById('edit-time-start-m'));
+  buildTimeOptions(document.getElementById('edit-time-end-h'), document.getElementById('edit-time-end-m'), true);
+  buildDurationOptions(document.getElementById('edit-duration-h'), document.getElementById('edit-duration-m'));
+  setTimeSplit('edit', 'start', e.timeStart || '');
+  setTimeSplit('edit', 'end', e.timeEnd || '');
+  setDurationMins('edit', e.duration ? parseInt(e.duration) : null);
 
   buildCategoryOptions(document.getElementById('edit-category'), e.catId || DEFAULT_CAT.id);
   applyCatSelectStyle(document.getElementById('edit-category'));
@@ -1486,33 +1504,33 @@ function updateEditSubcatSelect(catId, selectedSubId) {
 }
 
 function onEditStartChange() {
-  const start = timeToMins(document.getElementById('edit-time-start').value);
-  const dur = parseInt(document.getElementById('edit-duration').value);
-  const end = timeToMins(document.getElementById('edit-time-end').value);
-  if (start !== null && !isNaN(dur)) {
-    document.getElementById('edit-time-end').value = minsToTime(start + dur);
+  const start = timeToMins(getTimeSplit('edit', 'start'));
+  const dur = getDurationMins('edit');
+  const end = timeToMins(getTimeSplit('edit', 'end'));
+  if (start !== null && dur !== null) {
+    setTimeSplit('edit', 'end', minsToTime(start + dur));
   } else if (start !== null && end !== null) {
     const d = ((end - start) + 1440) % 1440;
-    document.getElementById('edit-duration').value = d > 0 ? String(d) : '';
+    setDurationMins('edit', d > 0 ? d : null);
   }
 }
 
 function onEditDurationChange() {
-  const start = timeToMins(document.getElementById('edit-time-start').value);
-  const dur = parseInt(document.getElementById('edit-duration').value);
-  if (start !== null && !isNaN(dur)) {
-    document.getElementById('edit-time-end').value = minsToTime(start + dur);
+  const start = timeToMins(getTimeSplit('edit', 'start'));
+  const dur = getDurationMins('edit');
+  if (start !== null && dur !== null) {
+    setTimeSplit('edit', 'end', minsToTime(start + dur));
   }
 }
 
 function onEditEndChange() {
-  const start = timeToMins(document.getElementById('edit-time-start').value);
-  const end = timeToMins(document.getElementById('edit-time-end').value);
+  const start = timeToMins(getTimeSplit('edit', 'start'));
+  const end = timeToMins(getTimeSplit('edit', 'end'));
   if (start !== null && end !== null) {
     const d = ((end - start) + 1440) % 1440;
-    document.getElementById('edit-duration').value = d > 0 ? String(d) : '';
+    setDurationMins('edit', d > 0 ? d : null);
   } else {
-    document.getElementById('edit-duration').value = '';
+    setDurationMins('edit', null);
   }
 }
 
@@ -1866,21 +1884,61 @@ function switchTab(name) {
 }
 
 // ── TIME DROPDOWNS ───────────────────────────────────────────
-function buildDurationOptions(selectEl) {
-  const opts = ['<option value="">— optional —</option>'];
-  for (let m = 15; m <= 8 * 60; m += 15) {
-    const h = Math.floor(m / 60);
-    const min = m % 60;
-    const label = h === 0 ? `${min} min` : min === 0 ? `${h}h` : `${h}h ${min}min`;
-    opts.push(`<option value="${m}">${label}</option>`);
+function buildDurationOptions(hourEl, minEl) {
+  const hOpts = ['<option value="">hr</option>'];
+  for (let h = 0; h <= 24; h++) hOpts.push(`<option value="${h}">${h}h</option>`);
+  hourEl.innerHTML = hOpts.join('');
+
+  const mOpts = ['<option value="">min</option>'];
+  for (const m of [0, 15, 30, 45]) mOpts.push(`<option value="${m}">${String(m).padStart(2,'0')}min</option>`);
+  minEl.innerHTML = mOpts.join('');
+}
+
+// Get total minutes from the two duration dropdowns (prefix: 'inp' or 'edit')
+function getDurationMins(prefix) {
+  const h = document.getElementById(`${prefix}-duration-h`).value;
+  const m = document.getElementById(`${prefix}-duration-m`).value;
+  if (h === '' && m === '') return null;
+  return (parseInt(h) || 0) * 60 + (parseInt(m) || 0);
+}
+
+// Set the two duration dropdowns from total minutes
+function setDurationMins(prefix, totalMins) {
+  if (totalMins === null || totalMins === undefined || isNaN(totalMins) || totalMins <= 0) {
+    document.getElementById(`${prefix}-duration-h`).value = '';
+    document.getElementById(`${prefix}-duration-m`).value = '';
+    return;
   }
-  selectEl.innerHTML = opts.join('');
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  const hEl = document.getElementById(`${prefix}-duration-h`);
+  const mEl = document.getElementById(`${prefix}-duration-m`);
+  hEl.value = h <= 24 ? String(h) : '24';
+  // snap minutes to nearest 15
+  const snappedM = Math.round(m / 15) * 15 % 60;
+  mEl.value = String(snappedM);
+}
+
+// Get duration as a string value (minutes) for saving, same as old .value
+function getDurationValue(prefix) {
+  const mins = getDurationMins(prefix);
+  return mins !== null && mins > 0 ? String(mins) : '';
 }
 
 function timeToMins(t) {
   if (!t) return null;
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
+}
+
+// Returns the effective duration in minutes for an entry,
+// falling back to computing from timeStart/timeEnd if duration field is empty
+function effectiveDuration(e) {
+  const d = parseInt(e.duration);
+  if (!isNaN(d) && d > 0) return d;
+  const s = timeToMins(e.timeStart), en = timeToMins(e.timeEnd);
+  if (s !== null && en !== null) return ((en - s) + 1440) % 1440;
+  return 0;
 }
 
 function fmtDuration(mins) {
@@ -1896,48 +1954,69 @@ function minsToTime(mins) {
 }
 
 function onStartChange() {
-  const start = timeToMins(document.getElementById('inp-time-start').value);
-  const dur = parseInt(document.getElementById('inp-duration').value);
-  const end = timeToMins(document.getElementById('inp-time-end').value);
-  if (start !== null && !isNaN(dur)) {
-    document.getElementById('inp-time-end').value = minsToTime(start + dur);
+  const start = timeToMins(getTimeSplit('inp', 'start'));
+  const dur = getDurationMins('inp');
+  const end = timeToMins(getTimeSplit('inp', 'end'));
+  if (start !== null && dur !== null) {
+    setTimeSplit('inp', 'end', minsToTime(start + dur));
   } else if (start !== null && end !== null) {
     const d = ((end - start) + 1440) % 1440;
-    document.getElementById('inp-duration').value = d > 0 ? String(d) : '';
+    setDurationMins('inp', d > 0 ? d : null);
   }
 }
 
 function onDurationChange() {
-  const start = timeToMins(document.getElementById('inp-time-start').value);
-  const dur = parseInt(document.getElementById('inp-duration').value);
-  if (start !== null && !isNaN(dur)) {
-    document.getElementById('inp-time-end').value = minsToTime(start + dur);
+  const start = timeToMins(getTimeSplit('inp', 'start'));
+  const dur = getDurationMins('inp');
+  if (start !== null && dur !== null) {
+    setTimeSplit('inp', 'end', minsToTime(start + dur));
   }
 }
 
 function onEndChange() {
-  const start = timeToMins(document.getElementById('inp-time-start').value);
-  const end = timeToMins(document.getElementById('inp-time-end').value);
+  const start = timeToMins(getTimeSplit('inp', 'start'));
+  const end = timeToMins(getTimeSplit('inp', 'end'));
   if (start !== null && end !== null) {
     const d = ((end - start) + 1440) % 1440;
-    document.getElementById('inp-duration').value = d > 0 ? String(d) : '';
+    setDurationMins('inp', d > 0 ? d : null);
   } else {
-    document.getElementById('inp-duration').value = '';
+    setDurationMins('inp', null);
   }
 }
 
-function buildTimeOptions(selectEl, includeBlank = false) {
-  const opts = includeBlank ? ['<option value="">— optional —</option>'] : [];
+function buildTimeOptions(hourEl, minEl, includeBlank = false) {
+  const blankH = includeBlank ? '<option value="">hr</option>' : '';
+  const blankM = includeBlank ? '<option value="">min</option>' : '';
+  const hOpts = [blankH];
   for (let h = 0; h < 24; h++) {
-    for (let m = 0; m < 60; m += 15) {
-      const hh = String(h).padStart(2, '0');
-      const mm = String(m).padStart(2, '0');
-      const val = `${hh}:${mm}`;
-      const label = formatTime12(h, m);
-      opts.push(`<option value="${val}">${label}</option>`);
-    }
+    const period = h < 12 ? 'AM' : 'PM';
+    const label = `${h % 12 === 0 ? 12 : h % 12} ${period}`;
+    hOpts.push(`<option value="${h}">${label}</option>`);
   }
-  selectEl.innerHTML = opts.join('');
+  hourEl.innerHTML = hOpts.join('');
+  const mOpts = [blankM];
+  for (const m of [0, 15, 30, 45]) mOpts.push(`<option value="${m}">${String(m).padStart(2,'0')}</option>`);
+  minEl.innerHTML = mOpts.join('');
+}
+
+// Get "HH:MM" string from split hour/min dropdowns (prefix: 'inp' or 'edit', suffix: 'start' or 'end')
+function getTimeSplit(prefix, suffix) {
+  const hEl = document.getElementById(`${prefix}-time-${suffix}-h`);
+  const mEl = document.getElementById(`${prefix}-time-${suffix}-m`);
+  if (!hEl || !mEl || hEl.value === '' || mEl.value === '') return '';
+  return `${String(parseInt(hEl.value)).padStart(2,'0')}:${String(parseInt(mEl.value)).padStart(2,'0')}`;
+}
+
+// Set split hour/min dropdowns from "HH:MM" string
+function setTimeSplit(prefix, suffix, timeStr) {
+  const hEl = document.getElementById(`${prefix}-time-${suffix}-h`);
+  const mEl = document.getElementById(`${prefix}-time-${suffix}-m`);
+  if (!hEl || !mEl) return;
+  if (!timeStr) { hEl.value = ''; mEl.value = ''; return; }
+  const [h, m] = timeStr.split(':').map(Number);
+  hEl.value = String(h);
+  // snap to nearest 15
+  mEl.value = String(Math.round(m / 15) * 15 % 60);
 }
 
 function formatTime12(h, m) {
@@ -2115,21 +2194,27 @@ const _origAddEntry = addEntry;
 function addEntry() {
   const location = document.getElementById('inp-location').value.trim();
   const date     = document.getElementById('inp-date').value;
-  const timeStart= document.getElementById('inp-time-start').value;
-  const timeEnd  = document.getElementById('inp-time-end').value;
-  const duration = document.getElementById('inp-duration').value;
+  const timeStart= getTimeSplit('inp', 'start');
+  const timeEnd  = getTimeSplit('inp', 'end');
+  const duration = getDurationValue('inp');
   const note     = document.getElementById('inp-note').value.trim();
   const catId    = document.getElementById('inp-category').value;
   const subCatId = document.getElementById('inp-subcategory').value;
   if (!location) { shake('inp-location'); document.getElementById('inp-location').focus(); return; }
   if (!date)     { shake('inp-date'); return; }
-  const entry = { id: Date.now(), location, date, timeStart, timeEnd, duration, note, catId, subCatId };
+  // Auto-calculate duration if missing but both times are set
+  let finalDuration = duration;
+  if (!finalDuration && timeStart && timeEnd) {
+    const d = ((timeToMins(timeEnd) - timeToMins(timeStart)) + 1440) % 1440;
+    if (d > 0) finalDuration = String(d);
+  }
+  const entry = { id: Date.now(), location, date, timeStart, timeEnd, duration: finalDuration, note, catId, subCatId };
   entries.unshift(entry);
   saveEntry(entry);          // Firestore
   updatePlaceCard(location, catId);
   document.getElementById('inp-location').value = '';
-  document.getElementById('inp-time-end').value = '';
-  document.getElementById('inp-duration').value = '';
+  setTimeSplit('inp', 'end', '');
+  setDurationMins('inp', null);
   document.getElementById('inp-subcategory').value = '';
   document.getElementById('inp-note').value = '';
   hideSuggestions();
@@ -2152,9 +2237,14 @@ function saveEditEntry() {
   if (!e) return;
   e.location  = document.getElementById('edit-location').value.trim() || e.location;
   e.date      = document.getElementById('edit-date').value || e.date;
-  e.timeStart = document.getElementById('edit-time-start').value;
-  e.timeEnd   = document.getElementById('edit-time-end').value;
-  e.duration  = document.getElementById('edit-duration').value;
+  e.timeStart = getTimeSplit('edit', 'start');
+  e.timeEnd   = getTimeSplit('edit', 'end');
+  let editDur = getDurationValue('edit');
+  if (!editDur && e.timeStart && e.timeEnd) {
+    const d = ((timeToMins(e.timeEnd) - timeToMins(e.timeStart)) + 1440) % 1440;
+    if (d > 0) editDur = String(d);
+  }
+  e.duration  = editDur;
   e.note      = document.getElementById('edit-note').value.trim();
   e.catId     = document.getElementById('edit-category').value;
   e.subCatId  = document.getElementById('edit-subcategory').value;
@@ -2180,9 +2270,9 @@ function confirmGapEntry() {
 }
 
 // ── INIT ─────────────────────────────────────────────────────
-buildTimeOptions(document.getElementById('inp-time-start'));
-buildTimeOptions(document.getElementById('inp-time-end'), true);
-buildDurationOptions(document.getElementById('inp-duration'));
+buildTimeOptions(document.getElementById('inp-time-start-h'), document.getElementById('inp-time-start-m'));
+buildTimeOptions(document.getElementById('inp-time-end-h'), document.getElementById('inp-time-end-m'), true);
+buildDurationOptions(document.getElementById('inp-duration-h'), document.getElementById('inp-duration-m'));
 buildCategoryOptions(document.getElementById('inp-category'), DEFAULT_CAT.id);
 initDefaults();
 updateCategoryPreview();
@@ -2240,7 +2330,7 @@ function renderPieChart() {
   // Accumulate minutes per category (only entries with duration)
   const catMins = {};
   for (const e of filtered) {
-    const dur = parseInt(e.duration);
+    const dur = effectiveDuration(e);
     if (!dur) continue;
     catMins[e.catId] = (catMins[e.catId] || 0) + dur;
   }
@@ -2320,9 +2410,9 @@ function renderPieChart() {
     const cat = getAllCats().find(c => c.id === pieActiveCat) || DEFAULT_CAT;
     const subs = getSubcats(pieActiveCat);
     const subMins = {};
-    for (const e of filtered.filter(e => e.catId === pieActiveCat && parseInt(e.duration))) {
+    for (const e of filtered.filter(e => e.catId === pieActiveCat && effectiveDuration(e))) {
       const key = e.subCatId || '__none__';
-      subMins[key] = (subMins[key] || 0) + parseInt(e.duration);
+      subMins[key] = (subMins[key] || 0) + effectiveDuration(e);
     }
     const catTotal = catMins[pieActiveCat] || 1;
     const subRows = Object.entries(subMins).sort((a,b)=>b[1]-a[1]).map(([key, mins]) => {
