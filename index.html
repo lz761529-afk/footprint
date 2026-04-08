@@ -1625,20 +1625,56 @@ function checkHomeGap(newEntry) {
   // Only trigger for overnight gaps (previous day → new entry's day)
   if (gapStartDate >= gapEndDate) return;
 
+  // If any entries already exist on newEntry's date before newEntry's start time,
+  // the gap is already (partially) filled — don't show the prompt
+  const todayEarlierEntries = entries.filter(e =>
+    e.id !== newEntry.id &&
+    e.date === newEntry.date &&
+    e.timeStart && e.timeStart < newEntry.timeStart
+  );
+  if (todayEarlierEntries.length > 0) return;
+
   const gapMins = (1440 - timeToMins(gapStart)) + timeToMins(gapEnd);
   if (gapMins < 15 || gapMins > 1440) return;
 
-  // Build the pending gap entry data
-  pendingGapEntry = {
-    location: 'Home',
-    date: gapStartDate,
-    timeStart: gapStart,
-    timeEnd: gapStartDate === gapEndDate ? gapEnd : '23:59',
-    duration: String(gapMins),
-    note: gapStartDate < gapEndDate ? `Overnight into ${formatDateLabel(gapEndDate)}` : '',
-    catId: 'home',
-    subCatId: ''
-  };
+  // Build the pending gap entry data — split into two entries if overnight
+  if (gapStartDate < gapEndDate) {
+    const minsYesterday = 1440 - timeToMins(gapStart); // gapStart → 23:59
+    const minsToday = timeToMins(gapEnd);               // 00:00 → gapEnd
+    pendingGapEntry = [
+      {
+        location: 'Home',
+        date: gapStartDate,
+        timeStart: gapStart,
+        timeEnd: '23:59',
+        duration: String(minsYesterday),
+        note: `Overnight into ${formatDateLabel(gapEndDate)}`,
+        catId: 'home',
+        subCatId: ''
+      },
+      ...(minsToday >= 15 ? [{
+        location: 'Home',
+        date: gapEndDate,
+        timeStart: '00:00',
+        timeEnd: gapEnd,
+        duration: String(minsToday),
+        note: `Overnight from ${formatDateLabel(gapStartDate)}`,
+        catId: 'home',
+        subCatId: ''
+      }] : [])
+    ];
+  } else {
+    pendingGapEntry = [{
+      location: 'Home',
+      date: gapStartDate,
+      timeStart: gapStart,
+      timeEnd: gapEnd,
+      duration: String(gapMins),
+      note: '',
+      catId: 'home',
+      subCatId: ''
+    }];
+  }
 
   const fromLabel = formatTime12(...gapStart.split(':').map(Number));
   const toLabel = formatTime12(...gapEnd.split(':').map(Number));
@@ -2130,10 +2166,12 @@ function saveEditEntry() {
 
 function confirmGapEntry() {
   if (!pendingGapEntry) return;
-  const entry = { id: Date.now(), ...pendingGapEntry };
-  entries.push(entry);
+  pendingGapEntry.forEach((data, i) => {
+    const entry = { id: Date.now() + i, ...data };
+    entries.push(entry);
+    saveEntry(entry);          // Firestore
+  });
   entries.sort((a,b) => b.date.localeCompare(a.date) || (b.timeStart||'').localeCompare(a.timeStart||''));
-  saveEntry(entry);          // Firestore
   updatePlaceCard('Home', 'home');
   dismissGapPrompt();
   renderEntries();
