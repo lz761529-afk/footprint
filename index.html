@@ -2490,10 +2490,27 @@ function togglePieCat(catId) {
 }
 
 // ── VOICE ENTRY ───────────────────────────────────────────────
-const ANTHROPIC_API_KEY = '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';
+// API key is stored in localStorage, not in code — set via Settings in the app
+function getAnthropicKey() { return localStorage.getItem('anthropic_api_key') || ''; }
 
 let recognition = null;
 let pendingVoiceEntries = [];
+
+function showApiKeyModal() {
+  document.getElementById('apikey-input').value = getAnthropicKey();
+  document.getElementById('apikey-modal-overlay').classList.add('show');
+  setTimeout(() => document.getElementById('apikey-input').focus(), 100);
+}
+function closeApiKeyModal() {
+  document.getElementById('apikey-modal-overlay').classList.remove('show');
+}
+function saveApiKey() {
+  const key = document.getElementById('apikey-input').value.trim();
+  if (!key.startsWith('sk-ant-')) { alert('That doesn\'t look like a valid Anthropic key. It should start with sk-ant-'); return; }
+  localStorage.setItem('anthropic_api_key', key);
+  closeApiKeyModal();
+  alert('✅ API key saved! You can now use Voice Entry.');
+}
 
 function startVoiceEntry() {
   const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -2537,6 +2554,12 @@ function resetVoiceBtn() {
 }
 
 async function parseVoiceEntry(transcript) {
+  const ANTHROPIC_API_KEY = getAnthropicKey();
+  if (!ANTHROPIC_API_KEY) {
+    resetVoiceBtn();
+    showApiKeyModal();
+    return;
+  }
   const today = toDateStr(new Date());
   const yesterday = (() => { const d = new Date(); d.setDate(d.getDate()-1); return toDateStr(d); })();
   const allCats = getAllCats();
@@ -2659,6 +2682,27 @@ function confirmVoiceEntries() {
   if (pendingVoiceEntries.length) checkHomeGap(entries[0]);
 }
 </script>
+
+<!-- API Key Modal -->
+<div class="voice-modal-overlay" id="apikey-modal-overlay">
+  <div class="voice-modal">
+    <div class="voice-modal-header">
+      <h3>🔑 Enter Anthropic API Key</h3>
+      <button class="modal-close" onclick="closeApiKeyModal()">✕</button>
+    </div>
+    <div style="padding:16px 20px">
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;line-height:1.6">
+        Your API key is stored only in <strong>your browser</strong> — never uploaded anywhere. Get your key at <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--accent)">console.anthropic.com</a>.
+      </p>
+      <input type="password" id="apikey-input" placeholder="sk-ant-api03-..." style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;outline:none" />
+      <p style="font-size:12px;color:var(--text-muted);margin-top:8px">You only need to do this once per device.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeApiKeyModal()" style="padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;background:var(--surface2);border:1px solid var(--border)">Cancel</button>
+      <button class="btn btn-primary" onclick="saveApiKey()">Save Key</button>
+    </div>
+  </div>
+</div>
 
 <!-- Voice Confirmation Modal -->
 <div class="voice-modal-overlay" id="voice-modal-overlay">
