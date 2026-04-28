@@ -2599,14 +2599,14 @@ Return ONLY valid JSON array, no explanation.`;
         'anthropic-dangerous-allow-browser': 'true'
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5',
+        model: 'claude-3-5-haiku-20241022',
         max_tokens: 800,
         messages: [{ role: 'user', content: `${systemPrompt}\n\nVoice input: "${transcript}"` }]
       })
     });
 
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error?.message || 'API error');
+    if (!res.ok) throw new Error(`API error ${res.status}: ${data.error?.message || JSON.stringify(data)}`);
 
     const text = data.content[0].text;
     const jsonMatch = text.match(/\[[\s\S]*\]/);
