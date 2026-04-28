@@ -946,8 +946,17 @@
 
 <!-- LOG TAB -->
 <div id="tab-log" class="tab-panel active">
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title" style="margin-bottom:4px">✨ Describe Your Day</div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:10px;line-height:1.5">Dictate or type what you did — the AI will create all the entries for you.</p>
+    <textarea id="day-description" placeholder="e.g. I woke up and went to Mitchell Park Tennis Court at 9am for 45 minutes, then headed to the office at 10:30 and worked until 6pm, then grabbed groceries at Whole Foods for 20 minutes…" style="width:100%;min-height:90px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;outline:none;resize:vertical;background:var(--surface);color:var(--text);line-height:1.6"></textarea>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:10px;flex-wrap:wrap">
+      <span style="font-size:12px;color:var(--text-muted)">💡 Works great with Wispr Flow or any voice-to-text tool</span>
+      <button class="btn btn-primary" id="parse-btn" onclick="parseDayDescription()">Parse &amp; Log Entries</button>
+    </div>
+  </div>
   <div class="card">
-    <div class="card-title">Add Location</div>
+    <div class="card-title">Add Location Manually</div>
     <div class="form-row">
       <div class="autocomplete-wrap">
         <div class="form-group">
@@ -1000,8 +1009,7 @@
         <select id="inp-subcategory" class="cat-select cat-select-form"></select>
       </div>
     </div>
-    <div style="margin-top: 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
-      <button class="voice-btn" id="voice-btn" onclick="startVoiceEntry()">🎤 Voice Entry</button>
+    <div style="margin-top: 14px; display: flex; justify-content: flex-end;">
       <button class="btn btn-primary" onclick="addEntry()">Add Entry</button>
     </div>
     <div id="gap-prompt" class="gap-prompt">
@@ -2496,6 +2504,81 @@ function getAnthropicKey() { return localStorage.getItem('anthropic_api_key') ||
 let recognition = null;
 let pendingVoiceEntries = [];
 
+async function parseDayDescription() {
+  const text = document.getElementById('day-description').value.trim();
+  if (!text) { alert('Please describe your day first.'); return; }
+
+  const ANTHROPIC_API_KEY = getAnthropicKey();
+  if (!ANTHROPIC_API_KEY) { showApiKeyModal(); return; }
+
+  const btn = document.getElementById('parse-btn');
+  btn.textContent = '⏳ Parsing…';
+  btn.disabled = true;
+
+  const today = toDateStr(new Date());
+  const yesterday = (() => { const d = new Date(); d.setDate(d.getDate()-1); return toDateStr(d); })();
+  const allCats = getAllCats();
+  const catList = allCats.map(c => `${c.id}: ${c.label} (keywords: ${(c.keywords||[]).slice(0,4).join(', ')})`).join('\n');
+
+  const prompt = `You are a location tracking assistant. Parse the following description into structured location log entries.
+Today is ${today}. Yesterday was ${yesterday}.
+
+Available categories:
+${catList}
+
+Return a JSON array of entry objects. Each entry has:
+- location: string (place name, proper case)
+- date: string (YYYY-MM-DD)
+- timeStart: string (HH:MM 24h format, or "" if unknown)
+- timeEnd: string (HH:MM 24h format, or "" if unknown)
+- duration: string (minutes as integer string, or "" if unknown)
+- catId: string (best matching category id from the list)
+- note: string (any extra detail, or "")
+
+Rules:
+- Split into one entry per location/activity
+- If only start+duration given, calculate timeEnd
+- If only start+end given, calculate duration in minutes
+- Words like "this morning", "last night", "yesterday" should set the correct date
+- Match catId from the list based on location name and activity
+- Return ONLY valid JSON array, no explanation
+
+Description: "${text}"`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+        'anthropic-dangerous-allow-browser': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-3-5-haiku-20241022',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(`API error ${res.status}: ${data.error?.message || JSON.stringify(data)}`);
+
+    const responseText = data.content[0].text;
+    const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) throw new Error('Could not parse response');
+
+    pendingVoiceEntries = JSON.parse(jsonMatch[0]);
+    showVoiceModal(text, pendingVoiceEntries);
+  } catch (err) {
+    console.error('Parse error:', err);
+    alert('Could not parse the description. Please try again.\n\nError: ' + err.message);
+  } finally {
+    btn.textContent = 'Parse & Log Entries';
+    btn.disabled = false;
+  }
+}
+
 function showApiKeyModal() {
   document.getElementById('apikey-input').value = getAnthropicKey();
   document.getElementById('apikey-modal-overlay').classList.add('show');
@@ -2676,6 +2759,7 @@ function confirmVoiceEntries() {
   });
   entries.sort((a,b) => b.date.localeCompare(a.date) || (b.timeStart||'').localeCompare(a.timeStart||''));
   closeVoiceModal();
+  document.getElementById('day-description').value = '';
   renderEntries();
   updatePlacesCount();
   // Check home gap for last added entry
