@@ -2557,7 +2557,7 @@ Description: "${text}"`;
     });
 
     const data = await res.json();
-    if (!res.ok) throw new Error(`API error ${res.status}: ${data.error?.message || JSON.stringify(data)}`);
+    if (!res.ok || !data.content) throw new Error(`API error: ${data.error?.message || JSON.stringify(data)}`);
 
     const responseText = data.content[0].text;
     const jsonMatch = responseText.match(/\[[\s\S]*\]/);
