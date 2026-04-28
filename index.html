@@ -2557,6 +2557,7 @@ Description: "${text}"`;
     });
 
     const data = await res.json();
+    console.log('API response:', JSON.stringify(data));
     if (!res.ok || !data.content) throw new Error(`API error: ${data.error?.message || JSON.stringify(data)}`);
 
     const responseText = data.content[0].text;
