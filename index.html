@@ -709,6 +709,53 @@
     .gap-prompt-desc { font-size: 13px; color: #78350f; margin-bottom: 10px; line-height: 1.5; }
     .gap-prompt-actions { display: flex; gap: 8px; }
 
+    /* ── VOICE ── */
+    .voice-btn {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 18px; border-radius: 8px; border: 1.5px solid var(--accent);
+      background: var(--surface); color: var(--accent);
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .voice-btn:hover { background: var(--accent-light); }
+    .voice-btn.listening { background: #fee2e2; border-color: #e53935; color: #c62828; animation: pulse 1s infinite; }
+    .voice-btn.processing { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
+    .voice-modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.4); z-index: 300;
+      align-items: center; justify-content: center; padding: 20px;
+    }
+    .voice-modal-overlay.show { display: flex; }
+    .voice-modal {
+      background: var(--surface); border-radius: 14px;
+      width: 100%; max-width: 500px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+      overflow: hidden;
+    }
+    .voice-modal-header {
+      padding: 16px 20px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .voice-modal-header h3 { font-size: 15px; font-weight: 700; }
+    .voice-transcript {
+      background: var(--surface2); border-radius: 8px;
+      padding: 12px 14px; font-size: 13px; color: var(--text-muted);
+      font-style: italic; margin-bottom: 14px; line-height: 1.5;
+    }
+    .voice-entries-list { display: flex; flex-direction: column; gap: 10px; }
+    .voice-entry-card {
+      border: 1.5px solid var(--border); border-radius: 10px;
+      padding: 12px 14px; font-size: 13px;
+    }
+    .voice-entry-card .vec-loc { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .voice-entry-card .vec-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+    .voice-entry-card .vec-tag {
+      background: var(--surface2); border-radius: 6px;
+      padding: 3px 8px; font-size: 12px; color: var(--text-muted);
+    }
+
     /* ── DAILY TAB ── */
     .day-nav {
       display: flex;
@@ -953,7 +1000,8 @@
         <select id="inp-subcategory" class="cat-select cat-select-form"></select>
       </div>
     </div>
-    <div style="margin-top: 14px; display: flex; justify-content: flex-end;">
+    <div style="margin-top: 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+      <button class="voice-btn" id="voice-btn" onclick="startVoiceEntry()">🎤 Voice Entry</button>
       <button class="btn btn-primary" onclick="addEntry()">Add Entry</button>
     </div>
     <div id="gap-prompt" class="gap-prompt">
@@ -2440,6 +2488,197 @@ function togglePieCat(catId) {
   pieActiveCat = pieActiveCat === catId ? null : catId;
   renderPieChart();
 }
+
+// ── VOICE ENTRY ───────────────────────────────────────────────
+const ANTHROPIC_API_KEY = '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';
+
+let recognition = null;
+let pendingVoiceEntries = [];
+
+function startVoiceEntry() {
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRec) {
+    alert('Voice recognition is not supported in your browser. Please use Chrome or Safari.');
+    return;
+  }
+  const btn = document.getElementById('voice-btn');
+  if (recognition) { recognition.stop(); return; }
+
+  recognition = new SpeechRec();
+  recognition.lang = 'en-US';
+  recognition.continuous = false;
+  recognition.interimResults = false;
+
+  recognition.onstart = () => {
+    btn.className = 'voice-btn listening';
+    btn.textContent = '🔴 Listening… (tap to stop)';
+  };
+  recognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript;
+    btn.className = 'voice-btn processing';
+    btn.textContent = '⏳ Processing…';
+    parseVoiceEntry(transcript);
+  };
+  recognition.onerror = (event) => {
+    resetVoiceBtn();
+    if (event.error !== 'no-speech') alert('Voice error: ' + event.error);
+  };
+  recognition.onend = () => {
+    recognition = null;
+    if (document.getElementById('voice-btn').classList.contains('listening')) resetVoiceBtn();
+  };
+  recognition.start();
+}
+
+function resetVoiceBtn() {
+  const btn = document.getElementById('voice-btn');
+  btn.className = 'voice-btn';
+  btn.textContent = '🎤 Voice Entry';
+}
+
+async function parseVoiceEntry(transcript) {
+  const today = toDateStr(new Date());
+  const yesterday = (() => { const d = new Date(); d.setDate(d.getDate()-1); return toDateStr(d); })();
+  const allCats = getAllCats();
+  const catList = allCats.map(c => `${c.id}: ${c.label} (keywords: ${(c.keywords||[]).slice(0,4).join(', ')})`).join('\n');
+
+  const systemPrompt = `You are a location tracking assistant. Parse voice input into structured location log entries.
+Today is ${today}. Yesterday was ${yesterday}.
+
+Available categories:
+${catList}
+
+Return a JSON array of entry objects. Each entry has:
+- location: string (place name, proper case)
+- date: string (YYYY-MM-DD)
+- timeStart: string (HH:MM 24h format, or "" if unknown)
+- timeEnd: string (HH:MM 24h format, or "" if unknown)
+- duration: string (minutes as integer string, or "" if unknown)
+- catId: string (best matching category id)
+- note: string (any extra detail, or "")
+
+Rules:
+- Handle multiple entries in one sentence (e.g. "office then gym")
+- If only start+duration given, calculate timeEnd
+- If only start+end given, calculate duration in minutes
+- Words like "this morning", "last night", "yesterday" should set the correct date
+- Match catId from the list above based on location name and activity
+
+Return ONLY valid JSON array, no explanation.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+        'anthropic-dangerous-allow-browser': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5',
+        max_tokens: 800,
+        messages: [{ role: 'user', content: `${systemPrompt}\n\nVoice input: "${transcript}"` }]
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || 'API error');
+
+    const text = data.content[0].text;
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) throw new Error('No JSON array in response');
+
+    pendingVoiceEntries = JSON.parse(jsonMatch[0]);
+    showVoiceModal(transcript, pendingVoiceEntries);
+  } catch (err) {
+    console.error('Voice parse error:', err);
+    alert('Could not understand the voice input. Please try again or add manually.\n\nError: ' + err.message);
+  } finally {
+    resetVoiceBtn();
+  }
+}
+
+function showVoiceModal(transcript, voiceEntries) {
+  const allCats = getAllCats();
+  const cardsHtml = voiceEntries.map((e, i) => {
+    const cat = allCats.find(c => c.id === e.catId) || DEFAULT_CAT;
+    const timeStr = e.timeStart ? `${e.timeStart}${e.timeEnd ? ' – ' + e.timeEnd : ''}` : '—';
+    const durStr = e.duration ? fmtDuration(e.duration) : (e.timeStart && e.timeEnd ? fmtDuration(((timeToMins(e.timeEnd)-timeToMins(e.timeStart))+1440)%1440) : '—');
+    return `<div class="voice-entry-card">
+      <div class="vec-loc">${escHtml(e.location || '—')}</div>
+      <div class="vec-row">
+        <span class="vec-tag">📅 ${e.date || '—'}</span>
+        <span class="vec-tag">🕐 ${timeStr}</span>
+        <span class="vec-tag">⏱ ${durStr}</span>
+        <span class="vec-tag" style="color:${cat.color};background:${cat.bg}">${cat.icon} ${cat.label}</span>
+        ${e.note ? `<span class="vec-tag">📝 ${escHtml(e.note)}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('voice-modal-transcript').textContent = '"' + transcript + '"';
+  document.getElementById('voice-modal-entries').innerHTML = cardsHtml;
+  document.getElementById('voice-modal-overlay').classList.add('show');
+}
+
+function closeVoiceModal() {
+  document.getElementById('voice-modal-overlay').classList.remove('show');
+  pendingVoiceEntries = [];
+}
+
+function confirmVoiceEntries() {
+  if (!pendingVoiceEntries.length) return;
+  pendingVoiceEntries.forEach((data, i) => {
+    // Auto-fill duration if missing
+    let dur = data.duration;
+    if (!dur && data.timeStart && data.timeEnd) {
+      const d = ((timeToMins(data.timeEnd) - timeToMins(data.timeStart)) + 1440) % 1440;
+      if (d > 0) dur = String(d);
+    }
+    const entry = {
+      id: Date.now() + i,
+      location: data.location || 'Unknown',
+      date: data.date || toDateStr(new Date()),
+      timeStart: data.timeStart || '',
+      timeEnd: data.timeEnd || '',
+      duration: dur || '',
+      note: data.note || '',
+      catId: data.catId || DEFAULT_CAT.id,
+      subCatId: ''
+    };
+    entries.unshift(entry);
+    saveEntry(entry);
+    updatePlaceCard(entry.location, entry.catId);
+  });
+  entries.sort((a,b) => b.date.localeCompare(a.date) || (b.timeStart||'').localeCompare(a.timeStart||''));
+  closeVoiceModal();
+  renderEntries();
+  updatePlacesCount();
+  // Check home gap for last added entry
+  if (pendingVoiceEntries.length) checkHomeGap(entries[0]);
+}
 </script>
+
+<!-- Voice Confirmation Modal -->
+<div class="voice-modal-overlay" id="voice-modal-overlay">
+  <div class="voice-modal">
+    <div class="voice-modal-header">
+      <h3>🎤 Voice Entry Review</h3>
+      <button class="modal-close" onclick="closeVoiceModal()">✕</button>
+    </div>
+    <div style="padding:16px 20px">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">What you said</div>
+      <div class="voice-transcript" id="voice-modal-transcript"></div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Entries to log</div>
+      <div class="voice-entries-list" id="voice-modal-entries"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeVoiceModal()" style="padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;background:var(--surface2);border:1px solid var(--border)">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmVoiceEntries()">✓ Log All Entries</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
